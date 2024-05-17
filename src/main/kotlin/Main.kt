@@ -1,38 +1,48 @@
 package org.example
 
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.example.deferred.asyncGrouped
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 
 fun main() {
     runBlocking {
-        val firstDigit = async {
-            delay(1.seconds)
+        val firstDigit = async(start = CoroutineStart.LAZY) {
+            delay(3.seconds)
+            println("Выполнился 1")
             1
         }
 
-        val secondDigit = async {
-            delay(1.seconds)
+        val secondDigit = async(start = CoroutineStart.LAZY) {
+            delay(4.seconds)
+            println("Выполнился 2")
             2
         }
 
         val thirdDigit = async(start = CoroutineStart.LAZY) {
-            delay(1.seconds)
+            delay(5.seconds)
+            println("Выполнился 3")
             3
         }
 
+        val dependencies = listOf(firstDigit, secondDigit, thirdDigit)
+
         measureTime {
-            val printer = asyncGrouped(
-                dependencies = listOf(firstDigit, secondDigit)
+
+            val grouped = asyncGrouped(
+                dependencies = dependencies
             ) {
-                println(firstDigit.await() + secondDigit.await() + thirdDigit.await())
+
+                dependencies.fold(0) { current, next ->
+                    current + next.await()
+                }.also { println("Результат: $it") }
+
             }
 
-            printer.await()
+            delay(2.seconds)
+
+            grouped.cancel()
+
         }.also { duration -> println("На выполнение ушло ${duration.inWholeSeconds} с.") }
     }
 }

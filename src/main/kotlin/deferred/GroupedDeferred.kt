@@ -5,34 +5,46 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
 class GroupedDeferred<T>(
-    private val baseDeferred: Deferred<T>,
+    private val parentDeferred: Deferred<T>,
     private val dependencies: List<Deferred<*>>,
-    private val originalCoroutineStart: CoroutineStart,
-    private val coroutineContext: CoroutineContext = EmptyCoroutineContext
-): Deferred<T> by baseDeferred {
+    coroutineContext: CoroutineContext = EmptyCoroutineContext,
+    actualCoroutineStart: CoroutineStart,
+): Deferred<T> by parentDeferred {
+
+    private val dependenciesScope = CoroutineScope(coroutineContext)
 
     init {
-        if (originalCoroutineStart != CoroutineStart.LAZY) {
+        /* В доке `DeferredCoroutine` сказано, что вызов `start` с `CoroutineStart.LAZY` ничего не делает */
+        if (actualCoroutineStart != CoroutineStart.LAZY) {
             start()
         }
     }
 
     override fun start(): Boolean {
-        CoroutineScope(coroutineContext).runDependencies()
-        return baseDeferred.start()
+        dependenciesScope.forEachDependency(Deferred<*>::await)
+        return parentDeferred.start()
     }
 
     override suspend fun await(): T {
         if (!isActive)
-            CoroutineScope(coroutineContext).runDependencies()
+            dependenciesScope.forEachDependency(Deferred<*>::await)
 
-        return baseDeferred.await()
+        return parentDeferred.await()
     }
 
-    private fun CoroutineScope.runDependencies() {
+    override fun cancel(cause: CancellationException?) {
+        dependenciesScope.forEachDependency {
+            cancel(cause)
+        }
+        return parentDeferred.cancel(cause)
+    }
+
+    private fun CoroutineScope.forEachDependency(
+        action: suspend Deferred<*>.() -> Unit
+    ) = launch {
         dependencies.forEach { dependency ->
             launch {
-                dependency.await()
+                dependency.action()
             }
         }
     }
@@ -40,7 +52,10 @@ class GroupedDeferred<T>(
 
 fun <T> CoroutineScope.asyncGrouped(
     context: CoroutineContext = EmptyCoroutineContext,
-    coroutineStart: CoroutineStart = CoroutineStart.DEFAULT,
+    start: CoroutineStart = CoroutineStart.DEFAULT,
     dependencies: List<Deferred<*>> = emptyList(),
     block: suspend CoroutineScope.() -> T
-): Deferred<T> = GroupedDeferred(async(context, CoroutineStart.LAZY, block), dependencies, coroutineStart, context)
+): Deferred<T> {
+    val parentDeferred = async(context, CoroutineStart.LAZY, block)
+    return GroupedDeferred(parentDeferred, dependencies, context, start)
+}
