@@ -26,6 +26,7 @@ class GroupedDeferred<T>(
     }
 
     override suspend fun await(): T {
+        /* если `start` уже был вызван */
         if (!isActive)
             dependenciesScope.forEachDependency(Deferred<*>::await)
 

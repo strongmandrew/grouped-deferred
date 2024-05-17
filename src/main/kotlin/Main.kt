@@ -8,19 +8,19 @@ import kotlin.time.measureTime
 fun main() {
     runBlocking {
         val firstDigit = async(start = CoroutineStart.LAZY) {
-            delay(3.seconds)
+            delay(5.seconds)
             println("Выполнился 1")
             1
         }
 
         val secondDigit = async(start = CoroutineStart.LAZY) {
-            delay(4.seconds)
+            delay(3.seconds)
             println("Выполнился 2")
             2
         }
 
         val thirdDigit = async(start = CoroutineStart.LAZY) {
-            delay(5.seconds)
+            delay(4.seconds)
             println("Выполнился 3")
             3
         }
@@ -30,6 +30,7 @@ fun main() {
         measureTime {
 
             val grouped = asyncGrouped(
+                start = CoroutineStart.LAZY,
                 dependencies = dependencies
             ) {
 
@@ -39,9 +40,12 @@ fun main() {
 
             }
 
-            delay(2.seconds)
-
+            /* групповая отмена
+            delay(1.seconds)
             grouped.cancel()
+            */
+
+            grouped.await()
 
         }.also { duration -> println("На выполнение ушло ${duration.inWholeSeconds} с.") }
     }
